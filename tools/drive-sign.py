@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
-"""PTY driver for the iPad signing tools.
+"""PTY driver for plumesign.
 
-Two tools are supported:
-
-  altserver  AltServer-Linux. Honours the ALTSERVER_ANISETTE_SERVER environment
-             variable, so it talks to the self-hosted anisette server. Preferred.
-  plumesign  PlumeImpactor. Its anisette endpoints are compile-time constants
-             (ani.f1sh.me / ani.sidestore.app) -- a *public* server. Only use when
-             the altserver route is unavailable.
-
-Both tools are interactive: they prompt for the Apple ID, the password and an Apple
-2FA code. This driver:
+plumesign is interactive: it prompts for the Apple ID, the password and a 2FA
+code, and it insists on a real terminal. This driver:
 
   * never puts a secret in argv (the tools ask for it on stdin instead);
   * turns PTY echo OFF before typing, so the password cannot land in the log;
@@ -18,9 +10,11 @@ Both tools are interactive: they prompt for the Apple ID, the password and an Ap
   * verifies the anisette server is answering *before* starting, and exits at once
     if it is not.
 
+Its anisette endpoint is a compile-time constant, so point it at your own server
+with tools/patch-plumesign.py first.
+
 Usage:
-  tools/drive-sign.py --tool altserver [--ipa tools/Dopamine.ipa] [--udid UDID]
-  tools/drive-sign.py --tool plumesign [--ipa tools/Dopamine.ipa]
+  tools/drive-sign.py [--ipa Dopamine.ipa]
 
 2FA: when the log says "WAITING FOR 2FA CODE", do
        echo <6-digit-code> > /tmp/2fa_code
@@ -50,7 +44,6 @@ ANISETTE = os.environ.get('ANISETTE_URL', 'http://10.0.0.30:6969').rstrip('/')
 DEADLINE = time.time() + int(os.environ.get('SIGN_DEADLINE', '480'))
 CODE_WAIT = time.time() + int(os.environ.get('SIGN_CODE_WAIT', '420'))
 
-ALTSERVER = os.path.join(HERE, 'AltServer-x86_64')
 PLUMESIGN = os.environ.get('PLUMESIGN_BIN') or os.path.join(HERE, 'plumesign-linux-x86_64')
 
 # AltServer prints " Apple ID: " and "Password: "; plumesign prints the same two, then
@@ -113,7 +106,7 @@ def anisette_ok():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--tool', choices=['altserver', 'plumesign'], required=True)
+    ap.add_argument('--tool', choices=['plumesign'], default='plumesign')
     ap.add_argument('--ipa', default=os.path.join(HERE, 'Dopamine.ipa'))
     ap.add_argument('--udid', default=None)
     args = ap.parse_args()
@@ -137,7 +130,7 @@ def main():
     udid = (args.udid or denv.get('IPAD_UDID') or denv.get('UDID')
             or os.environ.get('UDID', ''))
     # AltServer takes -a/-p as argv (it does not prompt); plumesign prompts on stdin.
-    secret_mode = 'argv' if args.tool == 'altserver' else 'stdin'
+    secret_mode = 'stdin'
 
     note('tool=%s ipa=%s (%d MB)' % (args.tool, os.path.basename(ipa),
                                      os.path.getsize(ipa) // 1048576))
@@ -147,32 +140,7 @@ def main():
 
     # Fail before spawning anything if the anisette backend is not answering: a broken
     # anisette is exactly how the public-server run died, and it wastes the user's time.
-    if args.tool == 'altserver' and not anisette_ok():
-        note('ABORT: self-hosted anisette is not answering; not starting the tool')
-        return 3
-
-    if args.tool == 'altserver':
-        if not os.access(ALTSERVER, os.X_OK):
-            note('AltServer binary missing/not executable: %s' % ALTSERVER)
-            return 2
-        # -a/-p are mandatory here: the tool goes straight to Apple's auth endpoint
-        # with an empty password otherwise (observed: HTTP 503). argvwipe.so removes the
-        # secret from /proc/<pid>/cmdline as soon as getopt finishes.
-        shim = os.path.join(HERE, 'argvwipe.so')
-        argv = [ALTSERVER, '-a', email, '-p', password]
-        child_env = dict(os.environ, ALTSERVER_ANISETTE_SERVER=ANISETTE,
-                         SIGN_ARGV_SECRET=password)
-        if udid:
-            argv += ['-u', udid]
-        else:
-            note('WARNING: no UDID found (device.env/--udid); relying on autodetect')
-        argv.append(ipa)
-        if os.path.isfile(shim):
-            child_env['LD_PRELOAD'] = shim
-        else:
-            note('WARNING: %s not built -- the password WILL be visible in ps' % shim)
-        binpath = ALTSERVER
-    else:
+    if True:
         if not os.access(PLUMESIGN, os.X_OK):
             note('plumesign binary missing/not executable: %s' % PLUMESIGN)
             return 2
