@@ -1,0 +1,32 @@
+# Device identity: UDID, serial, the device's own name. Deliberately kept out of
+# the docs so the runbook stays shareable -- keep it out of git for the same reason.
+device.env
+
+# The second screen is its own repository.
+second-screen/
+
+# Redistributable binaries and extracted AppImages: large, third-party, and not
+# ours to ship. JAILBREAK-GUIDE.md says where each one comes from.
+tools/*.ipa
+tools/*.appimage
+tools/*.zip
+tools/AltServer-x86_64
+tools/plumesign-linux-x86_64
+tools/plumesign-local
+tools/ldid
+tools/squashfs-root/
+tools/argvwipe.so
+tools/argvtest
+tools/__pycache__/
+
+# Runtime state
+run/
+*.log
+*.pid
+
+# Host-specific values; see .env.example
+.env
+
+# Local agent instructions, not part of the published project
+AGENTS.md
+ENVIRONMENT.md
